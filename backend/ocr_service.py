@@ -13,6 +13,7 @@ import csv
 logger = logging.getLogger(__name__)
 
 ocr = None
+easyocr_reader = None
 
 
 def get_cv2():
@@ -33,6 +34,23 @@ def get_numpy():
         raise RuntimeError("numpy is required for OCR confidence calculations") from exc
 
     return np
+
+
+def get_easyocr_reader():
+    """Initialize EasyOCR lazily so the service can run without it installed."""
+    global easyocr_reader
+
+    if easyocr_reader is None:
+        try:
+            import easyocr  # pylint: disable=import-outside-toplevel
+        except ImportError as exc:
+            raise RuntimeError("easyocr is required for EasyOCR extraction") from exc
+
+        logger.info("Initializing EasyOCR model...")
+        easyocr_reader = easyocr.Reader(["en"], gpu=False)
+        logger.info("EasyOCR model loaded successfully")
+
+    return easyocr_reader
 
 
 def get_ocr_engine():
@@ -180,6 +198,37 @@ def extract_text_with_tesseract(image_path):
     }
 
 
+def extract_text_with_easyocr(image_path, reader=None):
+    """Run OCR using EasyOCR and normalize the result structure."""
+    reader = reader or get_easyocr_reader()
+    result = reader.readtext(image_path, detail=1)
+
+    if not result:
+        return {"status": "error", "message": "No text detected in image"}
+
+    np = get_numpy()
+    extracted_text = []
+    for detection in result:
+        bbox = [[float(x), float(y)] for x, y in detection[0]]
+        text = detection[1]
+        confidence = float(detection[2])
+        extracted_text.append({
+            "text": text,
+            "confidence": confidence,
+            "bbox": bbox,
+        })
+
+    full_text = " ".join([item["text"] for item in extracted_text])
+    return {
+        "status": "success",
+        "full_text": full_text,
+        "structured_results": extracted_text,
+        "text_count": len(extracted_text),
+        "average_confidence": float(np.mean([item["confidence"] for item in extracted_text])),
+        "engine": "easyocr",
+    }
+
+
 def select_better_ocr_result(candidates):
     """Choose the strongest OCR result from a list of candidate payloads."""
     successful = [candidate for candidate in candidates if candidate.get("status") == "success"]
@@ -209,6 +258,14 @@ def extract_text_from_image(image_path, ocr_engine=None, preprocess_fn=None, sav
         temp_path = save_preprocessed_fn(image_path, preprocessed_img)
         try:
             if ocr_engine is None:
+                try:
+                    return select_better_ocr_result([
+                        extract_text_with_easyocr(temp_path),
+                        extract_text_with_easyocr(image_path),
+                    ])
+                except RuntimeError as easyocr_error:
+                    logger.warning("EasyOCR unavailable: %s", easyocr_error)
+
                 try:
                     ocr_engine = get_ocr_engine()
                 except RuntimeError as paddle_error:
