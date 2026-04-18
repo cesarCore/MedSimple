@@ -1,8 +1,6 @@
 Flask==3.0.0
 Flask-CORS==4.0.0
 easyocr==1.7.1
-paddleocr==2.7.0.3
-paddlepaddle==2.6.0
 opencv-python==4.8.1.78
 Pillow==10.1.0
 numpy==1.24.3
