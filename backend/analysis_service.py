@@ -10,7 +10,10 @@ import json
 import logging
 from datetime import datetime, timezone
 
-from backend.pubmed_service import fetch_citations
+try:
+    from backend.pubmed_service import fetch_citations
+except ModuleNotFoundError:
+    from pubmed_service import fetch_citations
 
 try:
     from backend.specialist_service import infer_specialist_types as _keyword_infer
