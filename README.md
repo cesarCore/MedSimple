@@ -1,6 +1,6 @@
 # Prescription Bottle OCR Analysis Application
 
-A full-stack web application that uses OCR technology to extract text from prescription bottle images, which is then analyzed by AI agents for side effects and ingredient research, and used to find local specialists.
+A full-stack application that extracts text from medication or supplement images, supports downstream AI analysis, and can find nearby specialists using Google Maps.
 
 ## Project Architecture
 
@@ -36,16 +36,17 @@ HootHacks_Project/
 - **File size limit**: 16MB
 
 ### OCR (Optical Character Recognition)
-- **Model**: PaddleOCR from Hugging Face
-- **Optimized for**:
-  - Curved text on cylindrical surfaces
-  - Glare and reflections from plastic bottles
-  - Rotated and skewed text
-  - Multi-line text extraction
+- **Primary engine order**:
+  - EasyOCR when installed
+  - PaddleOCR when installed
+  - Tesseract fallback
 - **Image preprocessing**:
   - Denoising to reduce glare effects
   - Contrast enhancement using CLAHE
-  - Automatic angle correction
+- **Works on**:
+  - prescription labels
+  - supplement facts panels
+  - photographed bottle / package text
 
 ### Text Extraction Results
 - **Full extracted text** from prescription bottle
@@ -57,6 +58,7 @@ HootHacks_Project/
 ### Backend API
 - **POST /api/upload** - Upload image and get OCR results
 - **POST /api/ocr** - Process OCR on existing image
+- **POST /api/find-specialists** - Find up to 5 nearby specialists / pharmacies
 - **GET /health** - Health check endpoint
 
 ## Installation & Setup
@@ -66,60 +68,44 @@ HootHacks_Project/
 - Node.js 16 or higher
 - npm or yarn package manager
 
-### Backend Setup
+## Quick Start
 
-1. **Navigate to backend directory**:
+### 1. Configure Environment
+
+Create the root `.env` file if it does not already exist:
+
 ```bash
-cd backend
+cp backend/.env.example .env
 ```
 
-2. **Create a Python virtual environment**:
-```bash
-python -m venv venv
+Then fill in the API keys you actually want to use:
 
-# On Windows
-venv\Scripts\activate
-
-# On macOS/Linux
-source venv/bin/activate
+```ini
+PUBMED_API_KEY=your_pubmed_key
+OPENAI_API_KEY=your_openai_key
+GOOGLE_MAPS_API_KEY=your_google_maps_key
 ```
 
-3. **Install Python dependencies**:
+The backend now loads the project root `.env` automatically.
+
+### 2. Start the Backend
+
 ```bash
-pip install -r requirements.txt
+source backend/.venv312/bin/activate
+PORT=5001 python backend/app.py
 ```
 
-4. **Set up environment variables**:
-```bash
-cp .env.example .env
-# Edit .env file with your configuration if needed
-```
+The backend will run at `http://localhost:5001`
 
-5. **Run the Flask backend**:
-```bash
-python app.py
-```
+### 3. Start the Frontend
 
-The backend will start on `http://localhost:5000`
-
-### Frontend Setup
-
-1. **Navigate to frontend directory**:
 ```bash
 cd frontend
-```
-
-2. **Install Node dependencies**:
-```bash
 npm install
-```
-
-3. **Start the React development server**:
-```bash
 npm start
 ```
 
-The frontend will automatically open at `http://localhost:3000`
+The frontend will run at `http://localhost:3000`
 
 ## Usage
 
@@ -132,28 +118,65 @@ The frontend will automatically open at `http://localhost:3000`
    - Extracted text from the bottle label
    - Confidence score of the OCR detection
    - Copy button to copy extracted text
+5. **Click "Find Specialists In This Area"** after OCR completes
+6. **Enter city and country** and search up to 5 nearby specialists / pharmacies
+7. **Click a result** to preview its location on the embedded map
 
-## OCR Model Details
+## Useful Commands
 
-### PaddleOCR
-- **Why PaddleOCR?**
-  - Excellent at handling curved text on cylindrical surfaces
-  - Built-in support for text angle classification
-  - Lightweight model suitable for web deployment
-  - Good performance with glare and reflections
-  - Open-source and free
+### Run backend
+```bash
+source backend/.venv312/bin/activate
+PORT=5001 python backend/app.py
+```
 
-- **Configuration**:
-  - Language: English (can be extended)
-  - Angle classification: Enabled
-  - GPU support: Optional (CPU mode by default)
+### Run frontend
+```bash
+cd frontend
+npm start
+```
 
-### Image Preprocessing
-The backend applies several preprocessing steps to improve OCR accuracy:
+### Run backend tests
+```bash
+source backend/.venv312/bin/activate
+python -m unittest discover -s backend/tests -v
+```
 
-1. **Denoising**: FastNlMeansDenoising to reduce glare and noise
-2. **Contrast Enhancement**: CLAHE (Contrast Limited Adaptive Histogram Equalization)
-3. **Angle Detection**: Automatic rotation correction
+### Run specialist route / service tests only
+```bash
+source backend/.venv312/bin/activate
+python -m unittest backend.tests.test_specialist_service backend.tests.test_routes -v
+```
+
+### Build frontend
+```bash
+cd frontend
+npm run build
+```
+
+### Health check
+```bash
+curl http://localhost:5001/health
+```
+
+### OCR upload test
+```bash
+curl -F "file=@tests/IMG_7027.webp" http://localhost:5001/api/upload
+```
+
+### Specialist lookup test
+```bash
+curl -X POST http://localhost:5001/api/find-specialists \
+  -H "Content-Type: application/json" \
+  -d '{
+    "medication_name": "Metformin for diabetes",
+    "user_location": {
+      "city": "Boston",
+      "country": "United States"
+    },
+    "radius": 5000
+  }'
+```
 
 ## API Documentation
 
@@ -209,39 +232,42 @@ Body: {
 ## Next Steps in the Pipeline
 
 After image upload and OCR:
-1. **Research Agent** → Pass extracted text to PubMed API for ingredient/side effects research
-2. **Summary Generation** → Create concise summary of findings
+1. **Research Agent** → Pass extracted text to PubMed API for ingredient / side-effect research
+2. **Analysis Agent** → Use OpenAI API for extraction, normalization, and summarization
 3. **Specialist Finder** → Use Google Maps API to locate local specialists
 
 ## Environment Variables
 
-### Backend (.env)
+### Root `.env`
 ```
 FLASK_ENV=development
 FLASK_DEBUG=True
 MAX_FILE_SIZE=16777216
 OCR_USE_GPU=False
 OCR_LANGUAGE=en
-API_PORT=5000
+API_PORT=5001
 API_HOST=0.0.0.0
-CORS_ORIGINS=["http://localhost:3000", "http://localhost:5000"]
+PUBMED_API_KEY=your_pubmed_key
+OPENAI_API_KEY=your_openai_key
+GOOGLE_MAPS_API_KEY=your_google_maps_key
+CORS_ORIGINS=["http://localhost:3000", "http://localhost:5001"]
 ```
 
 ### Frontend (.env)
 ```
-REACT_APP_API_URL=http://localhost:5000
+REACT_APP_API_URL=http://localhost:5001
 ```
 
 ## Troubleshooting
 
-### PaddleOCR model download fails
-- The model will be automatically downloaded on first use (~100MB)
-- Ensure you have internet connectivity
-- Check Python downloads directory permissions
-
 ### CORS errors
 - Ensure `CORS_ORIGINS` in backend .env includes frontend URL
 - Flask-CORS should handle this automatically
+
+### Google Maps specialist search fails
+- Ensure `GOOGLE_MAPS_API_KEY` is present in the root `.env`
+- The frontend sends `city` + `country`; the backend geocodes them before nearby search
+- Results are limited to 5 entries
 
 ### Image processing times out
 - Large or complex images may take longer
@@ -251,11 +277,12 @@ REACT_APP_API_URL=http://localhost:5000
 ## Technologies Used
 
 ### Backend
-- **Flask** 3.0.0 - Web framework
-- **PaddleOCR** 2.7.0 - OCR model
-- **OpenCV** 4.8.1 - Image processing
-- **Pillow** 10.1.0 - Image manipulation
-- **Flask-CORS** 4.0.0 - CORS handling
+- **Flask** - Web framework
+- **EasyOCR / PaddleOCR / Tesseract** - OCR engines
+- **OpenCV** - Image processing
+- **Pillow** - Image handling
+- **Flask-CORS** - CORS handling
+- **Google Maps Places + Geocoding APIs** - Specialist lookup
 
 ### Frontend
 - **React** 18.2.0 - UI framework

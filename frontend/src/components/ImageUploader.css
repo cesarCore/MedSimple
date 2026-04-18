@@ -327,6 +327,136 @@ h1 {
   font-style: italic;
 }
 
+.specialist-section {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid #dbe2ff;
+}
+
+.specialist-toggle,
+.specialist-search-button {
+  min-width: unset;
+}
+
+.specialist-panel {
+  margin-top: 16px;
+  background: white;
+  border: 1px solid #dbe2ff;
+  border-radius: 10px;
+  padding: 16px;
+}
+
+.specialist-helper,
+.specialist-summary {
+  margin: 0 0 12px 0;
+  color: #556;
+  font-size: 13px;
+}
+
+.location-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: #445;
+  font-weight: 600;
+}
+
+.field-group input {
+  border: 1px solid #d0d7f2;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 14px;
+}
+
+.field-group input:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.12);
+}
+
+.specialist-error {
+  margin-top: 14px;
+}
+
+.specialist-results {
+  margin-top: 18px;
+}
+
+.specialist-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.specialist-card {
+  text-align: left;
+  border: 1px solid #d5ddfb;
+  background: #f8f9ff;
+  border-radius: 10px;
+  padding: 14px;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  transition: border-color 0.2s ease, background-color 0.2s ease, transform 0.2s ease;
+}
+
+.specialist-card:hover,
+.specialist-card.active {
+  border-color: #667eea;
+  background: #eef1ff;
+  transform: translateY(-1px);
+}
+
+.specialist-card span {
+  color: #556;
+  font-size: 13px;
+}
+
+.map-preview {
+  margin-top: 16px;
+  border: 1px solid #d5ddfb;
+  border-radius: 10px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.map-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: #f8f9ff;
+  border-bottom: 1px solid #d5ddfb;
+}
+
+.map-preview-header h3 {
+  margin: 0;
+  font-size: 15px;
+  color: #223;
+}
+
+.map-preview-header a {
+  color: #667eea;
+  font-size: 13px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.map-frame {
+  width: 100%;
+  height: 280px;
+  border: 0;
+}
+
 /* Responsive Design */
 @media (max-width: 600px) {
   .uploader-container {
@@ -347,6 +477,15 @@ h1 {
 
   .button {
     min-width: 120px;
+  }
+
+  .location-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .map-preview-header {
+    align-items: flex-start;
+    flex-direction: column;
   }
 
   .text-area {

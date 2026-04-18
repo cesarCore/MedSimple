@@ -147,5 +147,22 @@ class FindSpecialistsRouteTests(RouteTestsBase):
         self.assertEqual(body["specialists"][0]["name"], "A")
 
 
+class AnalyzeRouteTests(RouteTestsBase):
+    def test_requires_ocr_full_text(self):
+        r = self.client.post("/api/analyze", json={})
+        self.assertEqual(r.status_code, 400)
+
+    def test_happy_path(self):
+        canned = {"status": "success", "product": {}, "ingredients": [],
+                  "clinical_findings": [], "warnings": [],
+                  "specialist_recommendation_basis": {}, "metadata": {}}
+        with patch.object(app_module, "analyze_service", return_value=canned):
+            r = self.client.post("/api/analyze", json={
+                "ocr": {"full_text": "Aspirin 500mg"},
+            })
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.get_json()["status"], "success")
+
+
 if __name__ == "__main__":
     unittest.main()

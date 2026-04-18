@@ -12,9 +12,20 @@ const ImageUploader = () => {
   const [extractedText, setExtractedText] = useState(null);
   const [error, setError] = useState(null);
   const [confidence, setConfidence] = useState(null);
+  const [specialistOpen, setSpecialistOpen] = useState(false);
+  const [specialistLoading, setSpecialistLoading] = useState(false);
+  const [specialistError, setSpecialistError] = useState(null);
+  const [specialistResults, setSpecialistResults] = useState(null);
+  const [locationCity, setLocationCity] = useState('');
+  const [locationCountry, setLocationCountry] = useState('');
+  const [selectedSpecialist, setSelectedSpecialist] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:5001';
 
   /**
    * Handle file selection from input
@@ -24,7 +35,7 @@ const ImageUploader = () => {
     if (!file) return;
 
     // Validate file type
-    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/bmp'];
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/gif', 'image/bmp', 'image/webp'];
     if (!allowedTypes.includes(file.type)) {
       setError('Invalid file type. Please upload an image file (PNG, JPG, GIF, BMP)');
       return;
@@ -94,6 +105,13 @@ const ImageUploader = () => {
     setError(null);
     setExtractedText(null);
     setConfidence(null);
+    setSpecialistOpen(false);
+    setSpecialistLoading(false);
+    setSpecialistError(null);
+    setSpecialistResults(null);
+    setSelectedSpecialist(null);
+    setAnalysis(null);
+    setAnalysisError(null);
 
     try {
       const formData = new FormData();
@@ -114,6 +132,7 @@ const ImageUploader = () => {
       if (data.status === 'success') {
         setExtractedText(data.ocr_data.full_text);
         setConfidence(data.ocr_data.average_confidence);
+        runAnalysis(data);
       } else {
         setError(data.message || 'OCR processing failed');
       }
@@ -134,10 +153,99 @@ const ImageUploader = () => {
     setExtractedText(null);
     setConfidence(null);
     setError(null);
+    setSpecialistOpen(false);
+    setSpecialistLoading(false);
+    setSpecialistError(null);
+    setSpecialistResults(null);
+    setSelectedSpecialist(null);
+    setLocationCity('');
+    setLocationCountry('');
+    setAnalysis(null);
+    setAnalysisError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
+    if (cameraInputRef.current) {
+      cameraInputRef.current.value = '';
+    }
   };
+
+  const runAnalysis = async (uploadData) => {
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/analyze`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ocr: {
+            full_text: uploadData.ocr_data.full_text,
+            average_confidence: uploadData.ocr_data.average_confidence,
+            structured_results: uploadData.ocr_data.structured_results || [],
+          },
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.message || 'Analysis failed');
+      }
+      setAnalysis(data);
+    } catch (err) {
+      setAnalysisError(err.message);
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
+
+  const handleFindSpecialists = async () => {
+    if (!extractedText) {
+      setSpecialistError('Extract text from the image before searching for specialists.');
+      return;
+    }
+
+    if (!locationCity.trim() || !locationCountry.trim()) {
+      setSpecialistError('Enter both city and country to search for specialists.');
+      return;
+    }
+
+    setSpecialistLoading(true);
+    setSpecialistError(null);
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/find-specialists`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          medication_name: extractedText,
+          user_location: {
+            city: locationCity.trim(),
+            country: locationCountry.trim(),
+          },
+          radius: 5000,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || data.status !== 'success') {
+        throw new Error(data.message || 'Specialist search failed');
+      }
+
+      setSpecialistResults(data);
+      setSelectedSpecialist(data.specialists?.[0] || null);
+    } catch (err) {
+      setSpecialistError(`Error: ${err.message}`);
+      setSpecialistResults(null);
+      setSelectedSpecialist(null);
+    } finally {
+      setSpecialistLoading(false);
+    }
+  };
+
+  const embeddedMapUrl = selectedSpecialist
+    ? `https://www.google.com/maps?q=${selectedSpecialist.latitude},${selectedSpecialist.longitude}&z=14&output=embed`
+    : null;
 
   /**
    * Trigger file input click
@@ -176,6 +284,14 @@ const ImageUploader = () => {
             ref={fileInputRef}
             type="file"
             accept="image/*"
+            onChange={handleFileSelect}
+            style={{ display: 'none' }}
+          />
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
             onChange={handleFileSelect}
             style={{ display: 'none' }}
           />
@@ -223,6 +339,14 @@ const ImageUploader = () => {
           >
             {loading ? 'Processing...' : 'Extract Text from Image'}
           </button>
+          <button
+            className="button button-secondary"
+            onClick={(e) => { e.stopPropagation(); cameraInputRef.current?.click(); }}
+            disabled={loading}
+            type="button"
+          >
+            📷 Take Photo
+          </button>
           {(selectedFile || extractedText) && (
             <button
               className="button button-secondary"
@@ -269,9 +393,139 @@ const ImageUploader = () => {
               </button>
             </div>
 
-            <p className="next-step">
-              This extracted text will be passed to the research agent for ingredient and side effects analysis.
-            </p>
+            <div className="analysis-panel">
+              <h2>Medication Analysis</h2>
+              {analysisLoading && <p>Analyzing ingredients and pulling PubMed citations…</p>}
+              {analysisError && <div className="error-message">{analysisError}</div>}
+              {analysis && (
+                <>
+                  {analysis.product?.normalized_name && (
+                    <p><strong>Product:</strong> {analysis.product.normalized_name} ({analysis.product.product_type})</p>
+                  )}
+                  {analysis.ingredients?.length > 0 && (
+                    <p><strong>Ingredients:</strong> {analysis.ingredients.map((i) => i.name_normalized).join(', ')}</p>
+                  )}
+                  {analysis.clinical_findings?.map((f) => (
+                    <div key={f.ingredient} className="finding-card">
+                      <h3>{f.ingredient} <span className={`severity severity-${f.severity}`}>{f.severity}</span></h3>
+                      <p>{f.summary}</p>
+                      {f.effects?.length > 0 && (
+                        <ul>{f.effects.map((e, idx) => <li key={idx}>{e}</li>)}</ul>
+                      )}
+                      {f.citations?.length > 0 && (
+                        <div className="citations">
+                          <strong>PubMed citations:</strong>
+                          <ul>
+                            {f.citations.map((c) => (
+                              <li key={c.pmid}>
+                                <a href={c.url} target="_blank" rel="noreferrer">PMID {c.pmid}: {c.title}</a>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                  {analysis.warnings?.length > 0 && (
+                    <p className="analysis-warnings"><strong>Warnings:</strong> {analysis.warnings.join('; ')}</p>
+                  )}
+                </>
+              )}
+            </div>
+
+            <div className="specialist-section">
+              <button
+                className="button button-secondary specialist-toggle"
+                onClick={() => setSpecialistOpen((current) => !current)}
+                type="button"
+              >
+                {specialistOpen ? 'Hide Specialist Search' : 'Find Specialists In This Area'}
+              </button>
+
+              {specialistOpen && (
+                <div className="specialist-panel">
+                  <p className="specialist-helper">
+                    Enter a city and country to search Google Maps for up to 5 nearby specialists.
+                  </p>
+
+                  <div className="location-grid">
+                    <label className="field-group">
+                      <span>City</span>
+                      <input
+                        type="text"
+                        value={locationCity}
+                        onChange={(event) => setLocationCity(event.target.value)}
+                        placeholder="Boston"
+                      />
+                    </label>
+                    <label className="field-group">
+                      <span>Country</span>
+                      <input
+                        type="text"
+                        value={locationCountry}
+                        onChange={(event) => setLocationCountry(event.target.value)}
+                        placeholder="United States"
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    className="button button-primary specialist-search-button"
+                    onClick={handleFindSpecialists}
+                    disabled={specialistLoading}
+                    type="button"
+                  >
+                    {specialistLoading ? 'Searching...' : 'Search Nearby Specialists'}
+                  </button>
+
+                  {specialistError && <div className="error-message specialist-error">{specialistError}</div>}
+
+                  {specialistResults && (
+                    <div className="specialist-results">
+                      <p className="specialist-summary">
+                        Search area: {specialistResults.user_location?.formatted_address || `${locationCity}, ${locationCountry}`}
+                      </p>
+                      <p className="specialist-summary">
+                        Inferred specialist types: {specialistResults.specialist_types.join(', ')}
+                      </p>
+
+                      <div className="specialist-list">
+                        {specialistResults.specialists.map((specialist) => (
+                          <button
+                            key={specialist.place_id || `${specialist.name}-${specialist.address}`}
+                            className={`specialist-card ${selectedSpecialist?.place_id === specialist.place_id ? 'active' : ''}`}
+                            onClick={() => setSelectedSpecialist(specialist)}
+                            type="button"
+                          >
+                            <strong>{specialist.name}</strong>
+                            <span>{specialist.specialist_type}</span>
+                            <span>{specialist.address}</span>
+                            <span>{specialist.distance_km} km away</span>
+                          </button>
+                        ))}
+                      </div>
+
+                      {selectedSpecialist && (
+                        <div className="map-preview">
+                          <div className="map-preview-header">
+                            <h3>{selectedSpecialist.name}</h3>
+                            <a href={selectedSpecialist.map_url} target="_blank" rel="noreferrer">
+                              Open in Google Maps
+                            </a>
+                          </div>
+                          <iframe
+                            title={`Map for ${selectedSpecialist.name}`}
+                            src={embeddedMapUrl}
+                            loading="lazy"
+                            className="map-frame"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         )}
 
