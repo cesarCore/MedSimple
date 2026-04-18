@@ -5,7 +5,7 @@ Flask application for image upload and OCR processing
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from paddleocr import PaddleOCR
+import easyocr
 import os
 import uuid
 from datetime import datetime
@@ -27,13 +27,15 @@ app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'bmp'}
 
-# Initialize OCR model (PaddleOCR - excellent for curved text and glare)
-# lang=['en'] for English, can be extended for multilingual
-# use_angle_cls=True helps with rotated text
-# use_gpu=False for CPU, set to True if GPU available
-logger.info("Initializing PaddleOCR model...")
-ocr = PaddleOCR(use_angle_cls=True, lang=['en'], use_gpu=False)
-logger.info("PaddleOCR model loaded successfully")
+# Initialize OCR model (EasyOCR - excellent for curved text and glare)
+# Supports English, works great on prescription bottles
+logger.info("Initializing EasyOCR model...")
+try:
+    reader = easyocr.Reader(['en'], gpu=False)
+    logger.info("EasyOCR model loaded successfully")
+except Exception as e:
+    logger.error(f"Failed to initialize EasyOCR: {str(e)}")
+    raise
 
 def allowed_file(filename):
     """Check if file extension is allowed"""
@@ -52,7 +54,7 @@ def preprocess_image(image_path):
         raise ValueError("Could not read image")
     
     # Apply denoising to reduce glare
-    denoised = cv2.fastNlMeansDenoisingColored(img, None, h=10, hForColorComponents=10, templateWindowSize=7, searchWindowSize=21)
+    denoised = cv2.fastNlMeansDenoisingColored(img, None, h=10, templateWindowSize=7, searchWindowSize=21)
     
     # Enhance contrast using CLAHE (Contrast Limited Adaptive Histogram Equalization)
     lab = cv2.cvtColor(denoised, cv2.COLOR_BGR2LAB)
@@ -82,7 +84,7 @@ def save_uploaded_file(file):
 
 def extract_text_from_image(image_path):
     """
-    Extract text from prescription bottle image using PaddleOCR
+    Extract text from prescription bottle image using EasyOCR
     Returns structured data with text and confidence scores
     """
     try:
@@ -93,27 +95,30 @@ def extract_text_from_image(image_path):
         temp_path = image_path.replace('.', '_preprocessed.')
         cv2.imwrite(temp_path, preprocessed_img)
         
-        # Run OCR
-        result = ocr.ocr(temp_path, cls=True)
+        # Run OCR with EasyOCR
+        result = reader.readtext(temp_path, detail=1)
         
         # Clean up temp file
         if os.path.exists(temp_path):
             os.remove(temp_path)
         
-        if not result or not result[0]:
+        if not result:
             return {"status": "error", "message": "No text detected in image"}
         
         # Structure the results
         extracted_text = []
-        for line in result[0]:
-            text = line[1][0]  # Extracted text
-            confidence = line[1][1]  # Confidence score
-            bbox = line[0]  # Bounding box coordinates
+        for detection in result:
+            bbox = detection[0]  # Bounding box coordinates
+            text = detection[1]  # Extracted text
+            confidence = detection[2]  # Confidence score
+            
+            # Convert bbox to JSON-serializable format
+            bbox_converted = [[float(x), float(y)] for x, y in bbox]
             
             extracted_text.append({
                 "text": text,
                 "confidence": float(confidence),
-                "bbox": bbox
+                "bbox": bbox_converted
             })
         
         # Combine all text for summary
