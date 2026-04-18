@@ -1,0 +1,137 @@
+flowchart TB
+ subgraph OCR_Layer["OCR Layer"]
+        ReceiveImage["Receive Image"]
+        RunOCR["Run Tesseract/Vision"]
+        ExtractText["Extract Raw Text"]
+        QualityCheck{"Text Quality OK?"}
+        OcrError["Return Error: Retake"]
+        QualityPass["Raw Text Valid"]
+  end
+ subgraph AI_Extract_Layer["AI Ingredient Extraction"]
+        SendToClaudeAI["Send to Claude API"]
+        ParseJSON{"Valid JSON?"}
+        HasIngredients{"Has ≥1 Item?"}
+        RetryStrict["Retry Stricter Prompt"]
+        ParseRetry{"Valid Now?"}
+        ExtractSuccess["Ingredient Array"]
+        ExtractFail["Return Error"]
+  end
+ subgraph PubMed_Layer["PubMed Research Layer"]
+        FanOut["Fan Out Ingredients"]
+        LoopStart["For Each Ingredient"]
+        QueryESearch["Query NCBI ESearch"]
+        GetPMIDs["Get Top 5 PMIDs"]
+        CheckZero{"Zero Results?"}
+        NoResults["No Data Found"]
+        QueryEFetch["Query NCBI EFetch"]
+        FetchAbstracts["Retrieve Abstracts"]
+        SendToSummarize["Send to Claude API"]
+        GenSummary["Generate Summary"]
+        CheckJSON{"Valid JSON?"}
+        VerifyCitations["Verify PMIDs Exist"]
+        StripUnverified["Strip Bad Citations"]
+        CalcConfidence["Calculate Confidence"]
+        LoopEnd["Collect All Results"]
+  end
+ subgraph Symptom_Layer["Symptom-to-Specialist"]
+        AggregateEffects["Aggregate All Effects"]
+        SendToMapClaudie["Send to Claude API"]
+        MapSpecialists["Map to Specialists"]
+        SpecialistList["Specialist Array"]
+  end
+ subgraph GoogleMaps_Layer["Google Maps Doctor Lookup"]
+        FanOutSpecialists["Fan Out Specialists"]
+        LoopSpec["For Each Specialist"]
+        QueryMaps["Query Google Maps API"]
+        CheckQuota{"Quota OK?"}
+        FallbackList["Use Static List"]
+        GetResults["Get Top 2-3 Doctors"]
+        LoopSpecEnd["Collect Doctor Info"]
+  end
+ subgraph Report_Layer["Report Assembly"]
+        AssembleData["Assemble All Data"]
+        GenHTML["Generate HTML Report"]
+        RenderReport["Render ReportView"]
+        PDFOption{"Download PDF?"}
+        ConvertPDF["html2pdf.js Convert"]
+        DownloadFile["Download PDF"]
+  end
+ subgraph Error_Handler["Error Handling"]
+        NetworkFail["Network Failure"]
+        CachePartial["Use Cached Results"]
+        ShowWarning["Show Warning"]
+  end
+    Start(["User Opens App"]) --> InputChoice{"Choose Input Method"}
+    InputChoice -- Mobile --> CameraCapture["Capture Photo"]
+    InputChoice -- Desktop --> FileUpload["Upload File"]
+    CameraCapture --> Preview["Preview Image"]
+    FileUpload --> Preview
+    Preview --> ConfirmImage{"Image Clear?"}
+    ConfirmImage -- No --> CameraCapture
+    ConfirmImage -- Yes --> ResizeImage["Resize to Max 1500px"]
+    ResizeImage --> EncodeBase64["Encode as Base64"]
+    EncodeBase64 --> SendToBackend["POST /api/upload"]
+    SendToBackend --> ReceiveImage
+    ReceiveImage --> RunOCR
+    RunOCR --> ExtractText
+    ExtractText --> QualityCheck
+    QualityCheck -- Poor --> OcrError
+    OcrError --> InputChoice
+    QualityCheck -- Good --> QualityPass
+    QualityPass --> SendToClaudeAI
+    SendToClaudeAI --> ParseJSON
+    ParseJSON -- Invalid --> RetryStrict
+    ParseJSON -- Valid --> HasIngredients
+    RetryStrict --> ParseRetry
+    ParseRetry -- Invalid --> ExtractFail
+    ParseRetry -- Valid --> HasIngredients
+    HasIngredients -- No --> ExtractFail
+    HasIngredients -- Yes --> ExtractSuccess
+    ExtractFail --> InputChoice
+    ExtractSuccess --> FanOut
+    FanOut --> LoopStart
+    LoopStart --> QueryESearch
+    QueryESearch --> GetPMIDs
+    GetPMIDs --> CheckZero
+    CheckZero -- Yes --> NoResults
+    NoResults --> LoopEnd
+    CheckZero -- No --> QueryEFetch
+    QueryEFetch --> FetchAbstracts
+    FetchAbstracts --> SendToSummarize
+    SendToSummarize --> GenSummary
+    GenSummary --> CheckJSON
+    CheckJSON -- Invalid --> LoopEnd
+    CheckJSON -- Valid --> VerifyCitations
+    VerifyCitations --> StripUnverified
+    StripUnverified --> CalcConfidence
+    CalcConfidence --> LoopEnd
+    LoopEnd --> AggregateEffects
+    AggregateEffects --> SendToMapClaudie
+    SendToMapClaudie --> MapSpecialists
+    MapSpecialists --> SpecialistList
+    SpecialistList --> FanOutSpecialists
+    FanOutSpecialists --> LoopSpec
+    LoopSpec --> QueryMaps
+    QueryMaps --> CheckQuota
+    CheckQuota -- Exceeded --> FallbackList
+    CheckQuota -- OK --> GetResults
+    FallbackList --> LoopSpecEnd
+    GetResults --> LoopSpecEnd
+    LoopSpecEnd --> AssembleData
+    AssembleData --> GenHTML
+    GenHTML --> RenderReport
+    RenderReport --> PDFOption
+    PDFOption -- Yes --> ConvertPDF
+    ConvertPDF --> DownloadFile
+    PDFOption -- No --> End(["Complete"])
+    DownloadFile --> End
+    NetworkFail -. Any Step .-> CachePartial
+    CachePartial --> ShowWarning
+
+    style OCR_Layer fill:#e1f5ff
+    style AI_Extract_Layer fill:#f3e5f5
+    style PubMed_Layer fill:#e8f5e9
+    style Symptom_Layer fill:#fff3e0
+    style GoogleMaps_Layer fill:#fce4ec
+    style Report_Layer fill:#f1f8e9
+    style Error_Handler fill:#ffebee
